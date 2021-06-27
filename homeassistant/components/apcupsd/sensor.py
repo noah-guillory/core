@@ -2,11 +2,12 @@
 import logging
 
 from apcaccess.status import ALL_UNITS
-import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_RESOURCES,
+    CONF_SENSORS,
     ELECTRICAL_CURRENT_AMPERE,
     ELECTRICAL_VOLT_AMPERE,
     FREQUENCY_HERTZ,
@@ -17,9 +18,10 @@ from homeassistant.const import (
     TIME_SECONDS,
     VOLT,
 )
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN
+from . import DOMAIN, APCUPSDEntity, APCUPSDUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,13 +109,40 @@ INFERRED_UNITS = {
     " Percent Load Capacity": PERCENTAGE,
 }
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_RESOURCES, default=[]): vol.All(
-            cv.ensure_list, [vol.In(SENSOR_TYPES)]
-        )
-    }
-)
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the APCUPSd sensors."""
+
+    coordinator: APCUPSDUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    # config flow sets this to either UUID, serial number or None
+    unique_id = entry.unique_id
+
+    if unique_id is None:
+        unique_id = entry.entry_id
+
+    entities = []
+
+    for sensor in entry.data[CONF_SENSORS]:
+        if sensor not in SENSOR_TYPES:
+            SENSOR_TYPES[sensor] = [
+                sensor.title(),
+                "",
+                "mdi:information-outline",
+            ]
+        if sensor.upper() not in coordinator.data:
+            _LOGGER.warning(
+                "Sensor type: %s does not appear in the APCUPSd status output",
+                sensor,
+            )
+
+        entities.append(APCUPSdSensor(entry.entry_id, unique_id, coordinator, sensor))
+
+    async_add_entities(entities, True)
 
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
@@ -155,17 +184,31 @@ def infer_unit(value):
     return value, None
 
 
-class APCUPSdSensor(SensorEntity):
+class APCUPSdSensor(APCUPSDEntity, SensorEntity):
     """Representation of a sensor entity for APCUPSd status values."""
 
-    def __init__(self, data, sensor_type):
+    def __init__(
+        self,
+        entry_id: str,
+        unique_id: str,
+        coordinator: APCUPSDUpdateCoordinator,
+        sensor_type,
+        enabled_default: bool = True,
+    ):
         """Initialize the sensor."""
-        self._data = data
+
         self.type = sensor_type
-        self._name = SENSOR_PREFIX + SENSOR_TYPES[sensor_type][0]
         self._unit = SENSOR_TYPES[sensor_type][1]
         self._inferred_unit = None
-        self._state = None
+
+        super().__init__(
+            entry_id=entry_id,
+            device_id=unique_id,
+            coordinator=coordinator,
+            name=f"{coordinator.data['MODEL']} {SENSOR_TYPES[sensor_type][0]}",
+            icon=SENSOR_TYPES[self.type][2],
+            enabled_default=enabled_default,
+        )
 
     @property
     def name(self):
@@ -179,22 +222,17 @@ class APCUPSdSensor(SensorEntity):
 
     @property
     def state(self):
-        """Return true if the UPS is online, else False."""
-        return self._state
+        """Return sensor data."""
+        return self.coordinator.data[self.type.upper()]
 
     @property
     def unit_of_measurement(self):
         """Return the unit of measurement of this entity, if any."""
         if not self._unit:
+            if not self._inferred_unit:
+                for unit in ALL_UNITS:
+                    if self.state.endswith(unit):
+                        self._inferred_unit = INFERRED_UNITS.get(unit, unit.strip())
+                    self._inferred_unit = None
             return self._inferred_unit
         return self._unit
-
-    def update(self):
-        """Get the latest status and use it to update our sensor state."""
-        if self.type.upper() not in self._data.status:
-            self._state = None
-            self._inferred_unit = None
-        else:
-            self._state, self._inferred_unit = infer_unit(
-                self._data.status[self.type.upper()]
-            )

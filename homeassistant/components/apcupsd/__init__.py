@@ -1,97 +1,100 @@
 """Support for APCUPSd via its Network Information Server (NIS)."""
+from __future__ import annotations
+
 from datetime import timedelta
 import logging
+from typing import OrderedDict
 
-from apcaccess import status
-import voluptuous as vol
+from apcaccess import status as apc
 
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-import homeassistant.helpers.config_validation as cv
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 3551
-DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
+SCAN_INTERVAL = timedelta(seconds=60)
 DOMAIN = "apcupsd"
 
-KEY_STATUS = "STATFLAG"
+PLATFORMS = [BINARY_SENSOR_DOMAIN, SENSOR_DOMAIN]
 
-VALUE_ONLINE = 8
 
-CONFIG_SCHEMA = vol.Schema(
-    {
-        DOMAIN: vol.Schema(
-            {
-                vol.Optional(CONF_HOST, default=DEFAULT_HOST): cv.string,
-                vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-                vol.Optional(
-                    CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
-                ): vol.All(cv.time_period, cv.positive_timedelta),
-            }
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up APCUPSD from a config entry."""
+    hass.data.setdefault(DOMAIN, {})
+    coordinator = hass.data[DOMAIN].get(entry.entry_id)
+    if not coordinator:
+        coordinator = APCUPSDUpdateCoordinator(
+            hass,
+            host=entry.data[CONF_HOST],
+            port=entry.data[CONF_PORT],
         )
-    },
-    extra=vol.ALLOW_EXTRA,
-)
+        hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    await coordinator.async_config_entry_first_refresh()
 
-async def async_setup(hass, config):
-    """Use config values to set up a function enabling status retrieval."""
-    conf = config[DOMAIN]
-    host = conf[CONF_HOST]
-    port = conf[CONF_PORT]
-    scan_interval = conf[CONF_SCAN_INTERVAL]
-
-    apcups_data = APCUPSdData(host, port)
-    hass.data[DOMAIN] = apcups_data
-
-    # It doesn't really matter why we're not able to get the status, just that
-    # we can't.
-    try:
-        await apcups_data._update_status()
-    except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception("Failure while testing APCUPSd status retrieval")
-        return True
-
-    async def update_status_callback(now):
-        # It doesn't really matter why we're not able to get the status, just that
-        # we can't.
-        try:
-            await apcups_data._update_status()
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception("Failure while testing APCUPSd status retrieval")
-            return True
-
-    hass.helpers.event.async_track_time_interval(update_status_callback, scan_interval)
+    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
 
     return True
 
 
-class APCUPSdData:
-    """Stores the data retrieved from APCUPSd.
+class APCUPSDUpdateCoordinator(DataUpdateCoordinator[OrderedDict]):
+    """Class to manage fetching APCUPSD data from NIS."""
 
-    For each entity to use, acts as the single point responsible for fetching
-    updates from the server.
-    """
-
-    def __init__(self, host, port):
-        """Initialize the data object."""
-
+    def __init__(self, hass: HomeAssistant, host: str, port: str) -> None:
+        """Initialize coordinator."""
         self._host = host
         self._port = port
-        self._status = None
-        self._get = status.get
-        self._parse = status.parse
+        self._get = apc.get
+        self._parse = apc.parse
 
-    @property
-    def status(self):
-        """Get latest update if throttle allows. Return status."""
-        return self._status
+        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
 
-    def _get_status(self):
-        """Get the status from APCUPSd and parse it into a dict."""
+    async def _async_update_data(self) -> OrderedDict:
+        """Fetch data from APCUPSD."""
         return self._parse(self._get(host=self._host, port=self._port))
 
-    async def _update_status(self, **kwargs):
-        """Fetch the latest status from APCUPSd."""
-        self._status = self._get_status()
+
+class APCUPSDEntity(CoordinatorEntity):
+    """Defines a base APCUPSD entity."""
+
+    def __init__(
+        self,
+        *,
+        entry_id: str,
+        device_id: str,
+        coordinator: APCUPSDUpdateCoordinator,
+        name: str,
+        icon: str,
+        enabled_default: bool = True,
+    ) -> None:
+        """Initialize the APCUPSD entity."""
+        super().__init__(coordinator)
+        self._device_id = device_id
+        self._enabled_default = enabled_default
+        self._entry_id = entry_id
+        self._icon = icon
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        """Return the name of the entity."""
+        return self._name
+
+    @property
+    def icon(self) -> str:
+        """Return the mdi icon of the entity."""
+        return self._icon
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        """Return if the entity should be enabled when first added to the entity registry."""
+        return self._enabled_default

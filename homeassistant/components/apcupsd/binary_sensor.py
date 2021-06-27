@@ -1,11 +1,17 @@
 """Support for tracking the online status of a UPS."""
+from __future__ import annotations
+
 import voluptuous as vol
 
 from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, BinarySensorEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME
+from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN, KEY_STATUS, VALUE_ONLINE
+from . import APCUPSDEntity, APCUPSDUpdateCoordinator
+from .const import DOMAIN, KEY_STATUS, VALUE_ONLINE
 
 DEFAULT_NAME = "UPS Online Status"
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -13,32 +19,46 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    """Set up an APCUPSd Online Status binary sensor."""
-    apcups_data = hass.data[DOMAIN]
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Create binary sensor for online status from config entry."""
+    coordinator: APCUPSDUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    add_entities([OnlineStatus(config, apcups_data)], True)
+    # config flow sets this to either UUID, serial number or None
+    unique_id = entry.unique_id
+
+    if unique_id is None:
+        unique_id = entry.entry_id
+
+    async_add_entities([OnlineStatus(entry.entry_id, unique_id, coordinator)], True)
 
 
-class OnlineStatus(BinarySensorEntity):
+class OnlineStatus(APCUPSDEntity, BinarySensorEntity):
     """Representation of an UPS online status."""
 
-    def __init__(self, config, data):
-        """Initialize the APCUPSd binary device."""
-        self._config = config
-        self._data = data
-        self._state = None
+    def __init__(
+        self,
+        entry_id: str,
+        unique_id: str,
+        coordinator: APCUPSDUpdateCoordinator,
+        enabled_default: bool = True,
+    ) -> None:
+        """Initialize APCUPSD sensor."""
+        self._unique_id = None
 
-    @property
-    def name(self):
-        """Return the name of the UPS online status sensor."""
-        return self._config[CONF_NAME]
+        super().__init__(
+            entry_id=entry_id,
+            device_id=unique_id,
+            coordinator=coordinator,
+            name=f"{coordinator.data['MODEL']} Status",
+            icon="mdi:power-plug",
+            enabled_default=enabled_default,
+        )
 
     @property
     def is_on(self):
         """Return true if the UPS is online, else false."""
-        return self._state & VALUE_ONLINE > 0
-
-    def update(self):
-        """Get the status report from APCUPSd and set this entity's state."""
-        self._state = int(self._data.status[KEY_STATUS], 16)
+        return int(self.coordinator.data[KEY_STATUS], 16) & VALUE_ONLINE > 0

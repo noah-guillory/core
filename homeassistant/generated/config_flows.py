@@ -21,6 +21,7 @@ FLOWS = [
     "ambee",
     "ambiclimate",
     "ambient_station",
+    "apcupsd",
     "apple_tv",
     "arcam_fmj",
     "asuswrt",

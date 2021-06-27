@@ -1,0 +1,21 @@
+{
+  "config": {
+      "abort": {
+         "already_configured": "Device is already configured",
+          "cannot_connect": "Failed to connect"
+      },
+      "error": {
+          "cannot_connect": "Failed to connect"
+      },
+      "flow_title": "{name}",
+      "step": {
+          "user": {
+              "data": {
+                  "host": "Host",
+                  "port": "Port"
+              },
+              "title": "Connect to APCUPSD NIS server"
+          }
+      }
+  }
+}
