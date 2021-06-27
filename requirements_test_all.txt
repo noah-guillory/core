@@ -267,7 +267,7 @@ coronavirus==1.1.1
 datadog==0.15.0
 
 # homeassistant.components.metoffice
-datapoint==0.9.5
+datapoint==0.9.8
 
 # homeassistant.components.debugpy
 debugpy==1.3.0
@@ -347,7 +347,7 @@ freebox-api==0.0.10
 fritzconnection==1.4.2
 
 # homeassistant.components.google_translate
-gTTS==2.2.2
+gTTS==2.2.3
 
 # homeassistant.components.garages_amsterdam
 garages-amsterdam==2.1.1
@@ -1015,7 +1015,7 @@ python-ecobee-api==0.2.11
 python-forecastio==1.4.0
 
 # homeassistant.components.izone
-python-izone==1.1.4
+python-izone==1.1.6
 
 # homeassistant.components.juicenet
 python-juicenet==1.0.2
