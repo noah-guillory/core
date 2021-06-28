@@ -1,22 +1,13 @@
 """Support for tracking the online status of a UPS."""
 from __future__ import annotations
 
-import voluptuous as vol
-
-from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import APCUPSDEntity, APCUPSDUpdateCoordinator
 from .const import DOMAIN, KEY_STATUS, VALUE_ONLINE
-
-DEFAULT_NAME = "UPS Online Status"
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string}
-)
 
 
 async def async_setup_entry(

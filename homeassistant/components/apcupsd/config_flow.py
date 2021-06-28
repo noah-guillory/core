@@ -13,8 +13,7 @@ from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_SENSORS, DEFAULT_HOST, DEFAULT_PORT, DOMAIN
-from .sensor import SENSOR_TYPES
+from .const import CONF_SENSORS, DEFAULT_HOST, DEFAULT_PORT, DOMAIN, SENSOR_TYPES
 
 _LOGGER = logging.getLogger(__name__)
 

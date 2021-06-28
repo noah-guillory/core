@@ -17,12 +17,11 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_HOST = "localhost"
-DEFAULT_PORT = 3551
 SCAN_INTERVAL = timedelta(seconds=60)
-DOMAIN = "apcupsd"
 
 PLATFORMS = [BINARY_SENSOR_DOMAIN, SENSOR_DOMAIN]
 
